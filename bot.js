@@ -27,6 +27,19 @@ const duracaoGravacao = Number(DURACAO_GRAVACAO_SEGUNDOS || 20);
 // Modelo atual recomendado pela Groq (o llama-3.3-70b-versatile antigo foi descontinuado)
 const modeloTexto = GROQ_MODEL || 'openai/gpt-oss-20b';
 
+// ---------- Palavras/expressões que os bots nunca podem falar ----------
+// Carrega de config/palavras-proibidas.json (uma palavra/expressão por linha do array)
+const caminhoPalavrasProibidas = path.join(__dirname, 'config', 'palavras-proibidas.json');
+let palavrasProibidas = [];
+if (fs.existsSync(caminhoPalavrasProibidas)) {
+  palavrasProibidas = JSON.parse(fs.readFileSync(caminhoPalavrasProibidas, 'utf-8'));
+}
+
+function contemPalavraProibida(texto) {
+  const textoNormalizado = texto.toLowerCase();
+  return palavrasProibidas.some((palavra) => textoNormalizado.includes(palavra.toLowerCase()));
+}
+
 // ---------- Carrega a lista de bots ----------
 const caminhoConfig = path.join(__dirname, 'config', 'bots.json');
 if (!fs.existsSync(caminhoConfig)) {
@@ -46,13 +59,42 @@ function adicionarAoHistorico(role, texto) {
 
 // ---------- Gera mensagem pra um bot específico, usando a personalidade dele ----------
 async function gerarMensagemIA(bot, gatilho, faladoRecentemente) {
-  const systemPrompt = `Você é um espectador na live de ${STREAMER_NOME} na Twitch, assistindo ele(a) jogar ${JOGO_ATUAL}.
+  const systemPrompt = `Voce e um espectador comum na live de ${STREAMER_NOME} na Twitch, assistindo ele(a) jogar ${JOGO_ATUAL}.
 ${bot.personalidade}
-Fale como um espectador real no chat: mensagens curtas (menos de 5 palavras) casuais, sem formalidade, (sem acentuação e pontuação).
-Você pode reagir a mensagens apenas dos que estão conversando no chat (inclusive outros bots) que aparecem no histórico, mas mantenha sua própria personalidade (sem mencionar ninguem no chat).
-${faladoRecentemente ? `\nO streamer acabou de falar isso em voz alta: "${faladoRecentemente}"\nSe fizer sentido, comente ou pergunte algo relacionado a isso.` : ''}
-Nunca se apresente como IA. Nunca use markdown. Responda só com a mensagem, nada mais. (sem mencionar a palavra streamer)`;
 
+Fale como uma pessoa real no chat, de maneira casual e espontanea.
+
+Suas mensagens devem ser curtas e naturais, sempre entre 2 e 5 palavras.
+Nao use acentuacao nem pontuacao como "?" e "!".
+
+IMPORTANTE:
+- Nao faca varias perguntas na mesma mensagem.
+- No maximo UMA pergunta por mensagem.
+- Perguntas devem ser raras. Na maioria das vezes apenas faca um comentario ou reacao.
+- Nao tente iniciar uma conversa toda vez que falar.
+- Nao tente chamar a atencao do chat.
+- Nao faca perguntas genericas para criar assunto.
+- Nao pergunte "o que voces acham", "alguem sabe", "voces viram" ou coisas parecidas sem um motivo claro.
+- Nao transforme cada mensagem em uma pergunta.
+- Se nao houver nada interessante para comentar, nao invente um assunto.
+- Evite falar sobre varios assuntos na mesma mensagem.
+- Uma mensagem deve transmitir apenas uma ideia.
+- Nao envie duas ou tres frases juntas.
+- Nao repita assuntos recentes.
+
+Voce pode reagir ao que estiver acontecendo na live, ao que ${STREAMER_NOME} falou recentemente ou a mensagens do historico.
+Se algo interessante aconteceu, prefira uma reacao simples como um espectador normal faria.
+Se nada justificar uma mensagem, nao tente criar uma conversa artificial.
+
+${faladoRecentemente ? `O que foi falado recentemente: "${faladoRecentemente}"
+Se isso tiver relacao com o momento atual, voce pode reagir de forma curta e natural. Nao transforme isso automaticamente em uma pergunta.` : ''}
+
+Nunca se apresente como IA.
+Nunca mencione que voce e um bot.
+Nunca use markdown.
+Nunca explique sua resposta.
+Responda somente com a mensagem que seria enviada no chat.
+Nao use a palavra streamer.`
 
   const mensagens = [
     { role: 'system', content: systemPrompt },
@@ -100,6 +142,10 @@ function iniciarBot(bot) {
         ? 'Reaja ao que o streamer acabou de falar em voz alta, ou puxe um assunto relacionado.'
         : 'Puxe um assunto novo e espontâneo agora, sobre o jogo ou sobre o dia do streamer.';
       const mensagem = await gerarMensagemIA(bot, gatilho, faladoRecentemente);
+      if (mensagem && contemPalavraProibida(mensagem)) {
+        console.warn(`[${bot.username}] mensagem bloqueada por conter palavra proibida: "${mensagem}"`);
+        return;
+      }
       if (mensagem) {
         console.log(`[${bot.username}] enviando: "${mensagem}"`);
         client.say(TWITCH_CHANNEL, mensagem);
@@ -130,6 +176,10 @@ function iniciarBot(bot) {
         bot,
         'O streamer acabou de responder algo no chat. Reaja de forma natural, do jeito da sua personalidade.'
       );
+      if (resposta && contemPalavraProibida(resposta)) {
+        console.warn(`[${bot.username}] mensagem bloqueada por conter palavra proibida: "${resposta}"`);
+        return;
+      }
       if (resposta) {
         setTimeout(() => {
           client.say(channel, resposta);
