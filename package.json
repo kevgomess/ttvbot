@@ -1,0 +1,17 @@
+{
+  "name": "twitch-ai-bot",
+  "version": "1.0.0",
+  "description": "Bot de IA com conta própria que interage no chat da Twitch, usando a API da Groq (gratuita)",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "listar-microfones": "node -e \"console.log(require('naudiodon').getDevices())\""
+  },
+  "dependencies": {
+    "groq-sdk": "^0.9.0",
+    "dotenv": "^16.4.5",
+    "tmi.js": "^1.8.5",
+    "naudiodon": "^2.3.6",
+    "wav": "^1.0.2"
+  }
+}
